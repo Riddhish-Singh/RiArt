@@ -115,7 +115,6 @@
             background: var(--bg-main);
         }
 
-        /* Mobile Header (Visible only on small screens) */
         .mobile-header {
             display: none;
             padding: 15px;
@@ -177,52 +176,123 @@
             height: auto;
             display: block;
             cursor: pointer;
+            background: #000;
+        }
+        
+        /* For attached user images */
+        .user-attachment {
+            max-width: 200px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: block;
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
-        /* Input Area */
+        /* Input Area - REFACTORED */
         .input-container {
             padding: 20px;
             border-top: 1px solid var(--border);
             background: var(--bg-main);
             display: flex;
             justify-content: center;
+            position: relative;
         }
 
-        .input-box {
+        .input-wrapper {
             width: 100%;
             max-width: 800px;
-            position: relative;
+            background: #0f172a;
+            border: 1px solid #475569;
+            border-radius: 16px;
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: border-color 0.2s;
+        }
+        .input-wrapper:focus-within { border-color: var(--accent); }
+
+        /* Preview Area (Hidden by default) */
+        .preview-area {
+            padding: 12px;
+            border-bottom: 1px solid #334155;
+            display: none;
+            animation: slideDown 0.2s ease;
+        }
+        .preview-area.active { display: flex; align-items: center; gap: 10px; }
+        
+        .preview-thumb {
+            height: 60px;
+            width: auto;
+            border-radius: 6px;
+            border: 1px solid var(--accent);
+        }
+        
+        .remove-preview {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .remove-preview:hover { background: #ef4444; color: white; }
+
+        /* Controls Row */
+        .input-controls {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            gap: 8px;
         }
 
         input {
             flex: 1;
-            padding: 16px 20px;
-            border-radius: 12px;
-            border: 1px solid #475569;
-            background: #0f172a;
+            padding: 12px;
+            border: none;
+            background: transparent;
             color: white;
             font-size: 16px;
             outline: none;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-        input:focus { border-color: var(--accent); }
+
+        .icon-btn {
+            background: transparent;
+            color: var(--text-dim);
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .icon-btn:hover { background: #1e293b; color: var(--text); }
+        .icon-btn.active { color: var(--accent); }
 
         .send-btn {
             background: var(--accent);
             color: #0f172a;
             border: none;
-            width: 54px;
-            border-radius: 12px;
+            width: 45px;
+            height: 45px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 1.2rem;
             transition: transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 5px;
         }
-        .send-btn:hover { filter: brightness(1.1); }
-        .send-btn:disabled { background: #475569; cursor: not-allowed; }
+        .send-btn:hover { filter: brightness(1.1); transform: scale(1.05); }
 
-        /* Loaders and Utilities */
+        /* Loaders */
         .loading-wrapper {
             width: 300px;
             height: 300px;
@@ -260,6 +330,7 @@
 
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideDown { from { height: 0; opacity: 0; } to { height: auto; opacity: 1; } }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -304,35 +375,70 @@
             </div>
 
         <div class="input-container">
-            <div class="input-box">
-                <input type="text" id="chatInput" placeholder="Describe your image... (e.g. 'Cyberpunk city')" autocomplete="off">
-                <button class="send-btn" id="sendBtn" onclick="handleSend()">➤</button>
+            <div class="input-wrapper">
+                <div class="preview-area" id="previewArea">
+                    <img src="" id="previewImg" class="preview-thumb">
+                    <div style="flex:1; font-size:0.8rem; color:var(--text-dim)">Image attached</div>
+                    <button class="remove-preview" onclick="clearImageSelection()">✕</button>
+                </div>
+
+                <div class="input-controls">
+                    <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Upload Image">
+                        📎
+                    </button>
+                    <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFileSelect(event)">
+                    
+                    <input type="text" id="chatInput" placeholder="Describe your image..." autocomplete="off">
+                    <button class="send-btn" id="sendBtn" onclick="handleSend()">➤</button>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
         // --- State Management ---
-        let chats = []; // Array of chat objects
+        let chats = []; 
         let activeChatId = null;
+        let currentImageFile = null; // Stores the selected file object
 
         // DOM Elements
         const chatArea = document.getElementById('chatArea');
         const historyList = document.getElementById('historyList');
         const chatInput = document.getElementById('chatInput');
-        const sendBtn = document.getElementById('sendBtn');
+        const previewArea = document.getElementById('previewArea');
+        const previewImg = document.getElementById('previewImg');
+        const fileInput = document.getElementById('fileInput');
         const sidebar = document.getElementById('sidebar');
 
         // --- Initialization ---
         window.onload = () => {
             loadChatsFromStorage();
             if (chats.length > 0) {
-                // Load most recent chat
                 switchChat(chats[0].id);
             } else {
                 startNewChat();
             }
         };
+
+        // --- File Handling ---
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                currentImageFile = file;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    previewImg.src = e.target.result;
+                    previewArea.classList.add('active');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function clearImageSelection() {
+            currentImageFile = null;
+            fileInput.value = '';
+            previewArea.classList.remove('active');
+        }
 
         // --- Core Logic ---
 
@@ -343,20 +449,19 @@
                 title: "New Art Session",
                 seed: Math.floor(Math.random() * 1000000),
                 currentPrompt: "",
-                messages: [] // { role, content, type (text/image) }
+                messages: [] 
             };
             
-            chats.unshift(newChat); // Add to top
+            chats.unshift(newChat); 
             saveChatsToStorage();
             renderHistory();
             switchChat(newId);
             
-            // Add welcome message
             setTimeout(() => {
-                addMessage(newId, 'bot', 'Hello! Describe an image to start generating. 🎨', 'text');
+                addMessage(newId, 'bot', 'Hello! Describe an image, or upload one to modify it. 🎨', 'text');
             }, 100);
             
-            if (window.innerWidth < 768) toggleSidebar(); // Close sidebar on mobile
+            if (window.innerWidth < 768) toggleSidebar(); 
         }
 
         function switchChat(id) {
@@ -364,22 +469,37 @@
             renderHistory();
             renderChatArea();
             chatInput.value = '';
+            clearImageSelection(); // Clear pending uploads when switching
             chatInput.focus();
         }
 
         function handleSend() {
             const text = chatInput.value.trim();
-            if (!text || !activeChatId) return;
+            if ((!text && !currentImageFile) || !activeChatId) return;
 
+            const hasImage = !!currentImageFile;
+            const imageFileToSend = currentImageFile; // Capture current file
+            
             // 1. Add User Message
-            addMessage(activeChatId, 'user', text, 'text');
-            chatInput.value = '';
+            // If image is attached, show a preview in chat
+            if (hasImage) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    addMessage(activeChatId, 'user', text, 'text', e.target.result);
+                };
+                reader.readAsDataURL(imageFileToSend);
+            } else {
+                addMessage(activeChatId, 'user', text, 'text');
+            }
 
-            // 2. Update Chat Logic (Prompt Accumulation)
+            // Clear Inputs
+            chatInput.value = '';
+            clearImageSelection();
+
+            // 2. Update Chat Logic
             const chat = chats.find(c => c.id === activeChatId);
             
-            // Update Title if it's the first real prompt
-            if (chat.messages.length <= 2) {
+            if (chat.messages.length <= 2 && text) {
                 chat.title = text.substring(0, 25) + (text.length > 25 ? '...' : '');
                 renderHistory();
             }
@@ -387,51 +507,90 @@
             // Accumulate prompt
             if (chat.currentPrompt === "") {
                 chat.currentPrompt = text;
-            } else {
+            } else if(text) {
                 chat.currentPrompt += `, ${text}`;
             }
 
-            // 3. Generate Image
+            // 3. Generate
             const loadingId = addLoadingBubble();
-            generateImage(chat, loadingId);
-            saveChatsToStorage();
+            generateImage(chat, chat.currentPrompt, imageFileToSend, loadingId);
         }
 
-        function generateImage(chat, bubbleId) {
-            const encodedPrompt = encodeURIComponent(chat.currentPrompt);
-            // We use the chat's specific seed to maintain consistency
-            const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${chat.seed}&nologo=true`;
+        async function generateImage(chat, prompt, imageFile, bubbleId) {
+            const encodedPrompt = encodeURIComponent(prompt || "artistic creation");
+            
+            // Strategy: 
+            // If Text only -> GET Request (Standard)
+            // If Image attached -> POST Request with Body (Image-to-Image)
+            
+            try {
+                let blob;
+                let finalUrl;
 
-            const img = new Image();
-            img.src = url;
+                if (imageFile) {
+                    // --- IMAGE TO IMAGE (POST) ---
+                    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${chat.seed}&nologo=true&model=flux`;
+                    
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        body: imageFile // Send raw file in body
+                    });
 
-            img.onload = () => {
-                // Replace loading bubble with actual image message
-                removeMessage(bubbleId); // Remove placeholder
-                addMessage(chat.id, 'bot', url, 'image'); // Add permanent image
-                saveChatsToStorage();
-            };
+                    if (!response.ok) throw new Error('Generation failed');
+                    blob = await response.blob();
+                    finalUrl = URL.createObjectURL(blob);
 
-            img.onerror = () => {
+                } else {
+                    // --- TEXT TO IMAGE (GET) ---
+                    // We simply construct the URL. 
+                    // To verify it loaded, we fetch it as blob or just set img src. 
+                    // Fetching as blob allows us to handle errors better.
+                    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${chat.seed}&nologo=true`;
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('Generation failed');
+                    blob = await response.blob();
+                    finalUrl = URL.createObjectURL(blob);
+                }
+
+                removeMessage(bubbleId);
+                addMessage(chat.id, 'bot', finalUrl, 'image');
+                
+                // Note: Blob URLs are temporary. Logic to persist them is complex in pure client-side.
+                // We save the chat history, but on reload, blob URLs die.
+                // For this "Infinite" app, we accept this limitation or would need Base64 conversion (heavy).
+
+            } catch (err) {
+                console.error(err);
                 const bubble = document.getElementById(bubbleId);
-                if(bubble) bubble.innerHTML = `<div style="padding:15px; color:#ef4444">Failed to load image.</div>`;
-            };
+                if(bubble) bubble.innerHTML = `<div style="padding:15px; color:#ef4444">Generation failed. Try again.</div>`;
+            }
         }
 
-        // --- Data & DOM Manipulation ---
+        // --- Data & DOM ---
 
-        function addMessage(chatId, role, content, type) {
+        function addMessage(chatId, role, content, type, attachmentData = null) {
             const chat = chats.find(c => c.id === chatId);
             if (!chat) return;
 
-            const msg = { role, content, type, id: Date.now() + Math.random() };
+            const msg = { 
+                role, 
+                content, 
+                type, 
+                attachment: attachmentData, // Store base64 of uploaded img for display
+                id: Date.now() + Math.random() 
+            };
+            
             chat.messages.push(msg);
             
-            // Only append to DOM if looking at this chat
             if (activeChatId === chatId) {
                 appendMessageToDOM(msg);
             }
-            saveChatsToStorage();
+            
+            // We don't save huge attachment strings to localStorage to avoid quota errors
+            // We create a "clean" copy for storage
+            const msgForStorage = { ...msg, attachment: attachmentData ? "Image Attached" : null };
+            // Actually, without backend, user loses history of images on refresh anyway. 
+            // We save what we can.
         }
 
         function appendMessageToDOM(msg) {
@@ -442,8 +601,17 @@
             const bubble = document.createElement('div');
             bubble.className = `msg-bubble ${msg.role}-msg`;
 
+            // Render User Attachment if exists
+            if (msg.attachment && msg.attachment !== "Image Attached") {
+                bubble.innerHTML += `<img src="${msg.attachment}" class="user-attachment">`;
+            } else if (msg.attachment === "Image Attached") {
+                bubble.innerHTML += `<div style="font-size:0.8em; opacity:0.7; margin-bottom:4px;">[Reference Image Uploaded]</div>`;
+            }
+
             if (msg.type === 'text') {
-                bubble.innerText = msg.content;
+                const textSpan = document.createElement('div');
+                textSpan.innerText = msg.content || "(Image Reference)";
+                bubble.appendChild(textSpan);
             } else if (msg.type === 'image') {
                 bubble.innerHTML = `
                     <img src="${msg.content}" class="generated-img" onclick="window.open('${msg.content}', '_blank')">
@@ -466,7 +634,7 @@
                 <div class="msg-bubble bot-msg">
                     <div class="loading-wrapper">
                         <div class="spinner"></div>
-                        <span>Rendering...</span>
+                        <span>Creating Art...</span>
                     </div>
                 </div>
             `;
@@ -484,7 +652,6 @@
             chatArea.innerHTML = '';
             const chat = chats.find(c => c.id === activeChatId);
             if (!chat) return;
-
             chat.messages.forEach(msg => appendMessageToDOM(msg));
         }
 
@@ -498,7 +665,6 @@
                     <button class="delete-chat" onclick="deleteChat(event, ${chat.id})">🗑</button>
                 `;
                 div.onclick = (e) => {
-                    // Prevent triggering if clicked delete
                     if(!e.target.classList.contains('delete-chat')) switchChat(chat.id);
                 }
                 historyList.appendChild(div);
@@ -508,20 +674,12 @@
         function deleteChat(e, id) {
             e.stopPropagation();
             if(!confirm("Delete this chat?")) return;
-
             chats = chats.filter(c => c.id !== id);
             saveChatsToStorage();
-            
-            if (chats.length === 0) {
-                startNewChat();
-            } else if (activeChatId === id) {
-                switchChat(chats[0].id);
-            } else {
-                renderHistory();
-            }
+            if (chats.length === 0) startNewChat();
+            else if (activeChatId === id) switchChat(chats[0].id);
+            else renderHistory();
         }
-
-        // --- Utils ---
 
         function scrollToBottom() {
             chatArea.scrollTop = chatArea.scrollHeight;
@@ -546,19 +704,24 @@
             }
         }
 
-        // --- LocalStorage ---
         function saveChatsToStorage() {
-            localStorage.setItem('riart_chats', JSON.stringify(chats));
+            // We limit history to avoid LocalStorage Quota full errors
+            // We strictly filter out huge base64 strings from storage
+            const safeChats = chats.map(chat => ({
+                ...chat,
+                messages: chat.messages.map(m => ({
+                    ...m,
+                    attachment: m.attachment ? "Image Attached" : null
+                }))
+            }));
+            localStorage.setItem('riart_chats', JSON.stringify(safeChats));
         }
 
         function loadChatsFromStorage() {
             const data = localStorage.getItem('riart_chats');
-            if (data) {
-                chats = JSON.parse(data);
-            }
+            if (data) chats = JSON.parse(data);
         }
 
-        // Handle Enter key
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleSend();
         });
