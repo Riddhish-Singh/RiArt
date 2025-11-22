@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RiArt - AI Image Studio</title>
+    <title>RiArt Studio - Persistent</title>
     <style>
         /* --- CSS STYLES --- */
         :root {
@@ -177,6 +177,7 @@
             display: block;
             cursor: pointer;
             background: #000;
+            min-height: 200px;
         }
         
         /* For attached user images */
@@ -188,7 +189,7 @@
             border: 1px solid rgba(255,255,255,0.2);
         }
 
-        /* Input Area - REFACTORED */
+        /* Input Area */
         .input-container {
             padding: 20px;
             border-top: 1px solid var(--border);
@@ -211,7 +212,7 @@
         }
         .input-wrapper:focus-within { border-color: var(--accent); }
 
-        /* Preview Area (Hidden by default) */
+        /* Preview Area */
         .preview-area {
             padding: 12px;
             border-bottom: 1px solid #334155;
@@ -273,7 +274,6 @@
             justify-content: center;
         }
         .icon-btn:hover { background: #1e293b; color: var(--text); }
-        .icon-btn.active { color: var(--accent); }
 
         .send-btn {
             background: var(--accent);
@@ -328,6 +328,13 @@
         }
         .bot-msg:hover .dl-btn { opacity: 1; }
 
+        .storage-warn {
+            font-size: 0.7rem;
+            color: #ef4444;
+            display: none;
+            margin-top: 5px;
+        }
+
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideDown { from { height: 0; opacity: 0; } to { height: auto; opacity: 1; } }
@@ -360,25 +367,27 @@
             <span>+</span> New Creation
         </button>
 
-        <div class="history-list" id="historyList">
-            </div>
+        <div class="history-list" id="historyList"></div>
+        
+        <div style="margin-top: auto; padding: 15px; border-top: 1px solid var(--border);">
+             <button onclick="clearAllStorage()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:0.8rem;">⚠ Clear All History</button>
+        </div>
     </div>
 
     <div class="main-content">
-        
         <div class="mobile-header">
             <button class="menu-btn" onclick="toggleSidebar()">☰</button>
             <span style="font-weight:bold">RiArt Studio</span>
-            <div style="width:24px"></div> </div>
+            <div style="width:24px"></div> 
+        </div>
 
-        <div class="chat-area" id="chatArea">
-            </div>
+        <div class="chat-area" id="chatArea"></div>
 
         <div class="input-container">
             <div class="input-wrapper">
                 <div class="preview-area" id="previewArea">
                     <img src="" id="previewImg" class="preview-thumb">
-                    <div style="flex:1; font-size:0.8rem; color:var(--text-dim)">Image attached</div>
+                    <div style="flex:1; font-size:0.8rem; color:var(--text-dim)">Image attached (Strict Mode On)</div>
                     <button class="remove-preview" onclick="clearImageSelection()">✕</button>
                 </div>
 
@@ -392,6 +401,7 @@
                     <button class="send-btn" id="sendBtn" onclick="handleSend()">➤</button>
                 </div>
             </div>
+            <div id="storageWarn" class="storage-warn">Storage Full - Old images might be removed</div>
         </div>
     </div>
 
@@ -399,7 +409,7 @@
         // --- State Management ---
         let chats = []; 
         let activeChatId = null;
-        let currentImageFile = null; // Stores the selected file object
+        let currentImageFile = null; 
 
         // DOM Elements
         const chatArea = document.getElementById('chatArea');
@@ -409,6 +419,7 @@
         const previewImg = document.getElementById('previewImg');
         const fileInput = document.getElementById('fileInput');
         const sidebar = document.getElementById('sidebar');
+        const storageWarn = document.getElementById('storageWarn');
 
         // --- Initialization ---
         window.onload = () => {
@@ -447,7 +458,6 @@
             const newChat = {
                 id: newId,
                 title: "New Art Session",
-                seed: Math.floor(Math.random() * 1000000),
                 currentPrompt: "",
                 messages: [] 
             };
@@ -457,9 +467,12 @@
             renderHistory();
             switchChat(newId);
             
-            setTimeout(() => {
-                addMessage(newId, 'bot', 'Hello! Describe an image, or upload one to modify it. 🎨', 'text');
-            }, 100);
+            // Only add welcome message if empty
+            if (newChat.messages.length === 0) {
+                setTimeout(() => {
+                    addMessage(newId, 'bot', 'Hello! Upload a photo to modify it. I will try my best to keep the original face. 🎨', 'text');
+                }, 100);
+            }
             
             if (window.innerWidth < 768) toggleSidebar(); 
         }
@@ -469,7 +482,7 @@
             renderHistory();
             renderChatArea();
             chatInput.value = '';
-            clearImageSelection(); // Clear pending uploads when switching
+            clearImageSelection(); 
             chatInput.focus();
         }
 
@@ -478,13 +491,13 @@
             if ((!text && !currentImageFile) || !activeChatId) return;
 
             const hasImage = !!currentImageFile;
-            const imageFileToSend = currentImageFile; // Capture current file
+            const imageFileToSend = currentImageFile; 
             
-            // 1. Add User Message
-            // If image is attached, show a preview in chat
+            // 1. Add User Message to UI immediately
             if (hasImage) {
                 const reader = new FileReader();
                 reader.onload = (e) => {
+                    // Pass the Base64 result to be saved
                     addMessage(activeChatId, 'user', text, 'text', e.target.result);
                 };
                 reader.readAsDataURL(imageFileToSend);
@@ -492,11 +505,9 @@
                 addMessage(activeChatId, 'user', text, 'text');
             }
 
-            // Clear Inputs
             chatInput.value = '';
             clearImageSelection();
 
-            // 2. Update Chat Logic
             const chat = chats.find(c => c.id === activeChatId);
             
             if (chat.messages.length <= 2 && text) {
@@ -504,60 +515,78 @@
                 renderHistory();
             }
 
-            // Accumulate prompt
             if (chat.currentPrompt === "") {
                 chat.currentPrompt = text;
             } else if(text) {
                 chat.currentPrompt += `, ${text}`;
             }
 
-            // 3. Generate
             const loadingId = addLoadingBubble();
             generateImage(chat, chat.currentPrompt, imageFileToSend, loadingId);
         }
 
         async function generateImage(chat, prompt, imageFile, bubbleId) {
-            const encodedPrompt = encodeURIComponent(prompt || "artistic creation");
+            const seed = Math.floor(Math.random() * 1000000);
             
-            // Strategy: 
-            // If Text only -> GET Request (Standard)
-            // If Image attached -> POST Request with Body (Image-to-Image)
+            let fullPrompt = "";
+            let params = "";
+
+            // --- SMART PROMPTING STRATEGY ---
+            if (imageFile) {
+                // Strict mode for images: Emphasize preserving features
+                // We append strict instructions to the prompt
+                fullPrompt = `${prompt}, preserve identity, exact facial features, high fidelity, 8k`;
+                // Important: NO enhance=true for images, it destroys faces
+                params = `?width=1280&height=1280&seed=${seed}&nologo=true&model=flux`;
+            } else {
+                // Creative mode for text
+                fullPrompt = `${prompt}, masterpiece, 8k, trending on artstation`;
+                params = `?width=1280&height=1280&seed=${seed}&nologo=true&model=flux&enhance=true`;
+            }
+
+            const encodedPrompt = encodeURIComponent(fullPrompt);
+            const baseUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}`;
             
             try {
-                let blob;
                 let finalUrl;
 
                 if (imageFile) {
-                    // --- IMAGE TO IMAGE (POST) ---
-                    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${chat.seed}&nologo=true&model=flux`;
-                    
-                    const response = await fetch(url, {
+                    // --- IMAGE TO IMAGE ---
+                    const response = await fetch(baseUrl + params, {
                         method: 'POST',
-                        body: imageFile // Send raw file in body
+                        body: imageFile 
                     });
 
                     if (!response.ok) throw new Error('Generation failed');
-                    blob = await response.blob();
-                    finalUrl = URL.createObjectURL(blob);
-
+                    // We get the blob to display it immediately
+                    const blob = await response.blob();
+                    
+                    // But for SAVING, we need a permanent URL. 
+                    // Pollinations doesn't give a permanent URL for POST requests easily without hosting.
+                    // Workaround: We save the Base64 of the RESULT if possible, or warn user.
+                    // Actually, for this specific tool, let's try to use the Blob for now 
+                    // BUT convert blob to Base64 for storage.
+                    const reader = new FileReader();
+                    reader.readAsDataURL(blob); 
+                    reader.onloadend = function() {
+                        const base64data = reader.result;
+                        removeMessage(bubbleId);
+                        addMessage(chat.id, 'bot', base64data, 'image'); // Save Base64!
+                    }
                 } else {
-                    // --- TEXT TO IMAGE (GET) ---
-                    // We simply construct the URL. 
-                    // To verify it loaded, we fetch it as blob or just set img src. 
-                    // Fetching as blob allows us to handle errors better.
-                    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${chat.seed}&nologo=true`;
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error('Generation failed');
-                    blob = await response.blob();
-                    finalUrl = URL.createObjectURL(blob);
+                    // --- TEXT TO IMAGE ---
+                    // For text, the URL itself is the image source! This is perfect for saving.
+                    finalUrl = baseUrl + params;
+                    
+                    // Pre-load to ensure it's ready
+                    const img = new Image();
+                    img.onload = () => {
+                        removeMessage(bubbleId);
+                        addMessage(chat.id, 'bot', finalUrl, 'image');
+                    };
+                    img.onerror = () => { throw new Error("Load failed"); };
+                    img.src = finalUrl;
                 }
-
-                removeMessage(bubbleId);
-                addMessage(chat.id, 'bot', finalUrl, 'image');
-                
-                // Note: Blob URLs are temporary. Logic to persist them is complex in pure client-side.
-                // We save the chat history, but on reload, blob URLs die.
-                // For this "Infinite" app, we accept this limitation or would need Base64 conversion (heavy).
 
             } catch (err) {
                 console.error(err);
@@ -576,7 +605,7 @@
                 role, 
                 content, 
                 type, 
-                attachment: attachmentData, // Store base64 of uploaded img for display
+                attachment: attachmentData, 
                 id: Date.now() + Math.random() 
             };
             
@@ -586,11 +615,7 @@
                 appendMessageToDOM(msg);
             }
             
-            // We don't save huge attachment strings to localStorage to avoid quota errors
-            // We create a "clean" copy for storage
-            const msgForStorage = { ...msg, attachment: attachmentData ? "Image Attached" : null };
-            // Actually, without backend, user loses history of images on refresh anyway. 
-            // We save what we can.
+            saveChatsToStorage();
         }
 
         function appendMessageToDOM(msg) {
@@ -601,18 +626,17 @@
             const bubble = document.createElement('div');
             bubble.className = `msg-bubble ${msg.role}-msg`;
 
-            // Render User Attachment if exists
-            if (msg.attachment && msg.attachment !== "Image Attached") {
-                bubble.innerHTML += `<img src="${msg.attachment}" class="user-attachment">`;
-            } else if (msg.attachment === "Image Attached") {
-                bubble.innerHTML += `<div style="font-size:0.8em; opacity:0.7; margin-bottom:4px;">[Reference Image Uploaded]</div>`;
+            // Display Attachment
+            if (msg.attachment) {
+                 bubble.innerHTML += `<img src="${msg.attachment}" class="user-attachment">`;
             }
 
             if (msg.type === 'text') {
                 const textSpan = document.createElement('div');
-                textSpan.innerText = msg.content || "(Image Reference)";
+                textSpan.innerText = msg.content || "";
                 bubble.appendChild(textSpan);
             } else if (msg.type === 'image') {
+                // If content starts with 'data:', it's base64. If 'http', it's url.
                 bubble.innerHTML = `
                     <img src="${msg.content}" class="generated-img" onclick="window.open('${msg.content}', '_blank')">
                     <button class="dl-btn" onclick="downloadImage('${msg.content}')">⬇ Download</button>
@@ -690,36 +714,43 @@
         }
 
         async function downloadImage(url) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `RiArt-${Date.now()}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- SAVING LOGIC (Local Storage) ---
+        function saveChatsToStorage() {
             try {
-                const response = await fetch(url);
-                const blob = await response.blob();
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `RiArt-${Date.now()}.jpg`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            } catch (err) {
-                window.open(url, '_blank');
+                localStorage.setItem('riart_chats', JSON.stringify(chats));
+                storageWarn.style.display = 'none';
+            } catch (e) {
+                console.error("Storage full", e);
+                storageWarn.style.display = 'block';
+                // If quota exceeded, try to remove oldest chat or attachment
+                // Simple failsafe: Alert user
             }
         }
 
-        function saveChatsToStorage() {
-            // We limit history to avoid LocalStorage Quota full errors
-            // We strictly filter out huge base64 strings from storage
-            const safeChats = chats.map(chat => ({
-                ...chat,
-                messages: chat.messages.map(m => ({
-                    ...m,
-                    attachment: m.attachment ? "Image Attached" : null
-                }))
-            }));
-            localStorage.setItem('riart_chats', JSON.stringify(safeChats));
+        function loadChatsFromStorage() {
+            try {
+                const data = localStorage.getItem('riart_chats');
+                if (data) chats = JSON.parse(data);
+            } catch(e) {
+                console.error("Error loading chats", e);
+                localStorage.removeItem('riart_chats');
+            }
         }
 
-        function loadChatsFromStorage() {
-            const data = localStorage.getItem('riart_chats');
-            if (data) chats = JSON.parse(data);
+        function clearAllStorage() {
+            if(confirm("Clear all history? This cannot be undone.")) {
+                localStorage.removeItem('riart_chats');
+                chats = [];
+                startNewChat();
+            }
         }
 
         chatInput.addEventListener('keypress', (e) => {
